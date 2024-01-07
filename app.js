@@ -1,13 +1,4 @@
-//jshint esversion:6
-
-//Hashing//
-//Password -> Hash Function -> Hash
-
-//Salting//
-//Password -> 28891(salt) -> Hash Function -> Hash
-
-//Salt Rounds// (2 Round) (2 kademeli yaptık)
-//Password -> 548796(salt) -> Hash Function -> Hash --> 548797(salt) -> Hash Function -> Hash
+// jshint esversion:6
 
 require("dotenv").config();
 const express = require("express");
@@ -36,16 +27,40 @@ app.use(
 app.use(passport.initialize());
 app.use(passport.session());
 
-//27017 -> mongodb için default port
-mongoose.connect("mongodb://localhost/userDB", { useUnifiedTopology: true, useNewUrlParser: true });
+mongoose.connect("mongodb+srv://uri", {
+  useUnifiedTopology: true,
+  useNewUrlParser: true
+});
 
 const userSchema = new mongoose.Schema({
+  firstName: String,
+  lastName: String,
   email: String,
+  phoneNumber: String,
   password: String,
+  confirmPassword: String,
+  address: String,
+  website: String,
+  nickname: String,
+  country: String,
+  city: String,
+  gender: String,
+  relationshipstatus: String,
+  education: String,
+  job: String,
+  purpose: String,
+  interest: String,
+  dateOfBirth: {
+    year: Number,
+    month: Number,
+    date: Number
+  },
+  aboutyourself: String,
+  coverPhoto: String,
+  profilePhoto: String,
   googleId: String,
-  secret: String,
+  secret: String
 });
-//hash and salt our password and to save our users into our mongodb database
 userSchema.plugin(passportLocalMongoose);
 userSchema.plugin(findOrCreate);
 
@@ -53,36 +68,35 @@ const User = new mongoose.model("User", userSchema);
 
 passport.use(User.createStrategy());
 
-//only works local strategy
-/*
 passport.serializeUser(User.serializeUser());
 passport.deserializeUser(User.deserializeUser());
-*/
 
-//works all strategy
-passport.serializeUser(function (user, done) {
-  done(null, user.id);
-});
-
-passport.deserializeUser(function (id, done) {
-  User.findById(id, function (err, user) {
-    done(err, user);
-  });
-});
-
-//Google Auth20
 passport.use(
   new GoogleStrategy(
     {
       clientID: process.env.CLIENT_ID,
       clientSecret: process.env.CLIENT_SECRET,
       callbackURL: "http://localhost:3000/auth/google/secrets",
-      //userProfileURL: "https://www.googleapis.com/oauth2/v3/userinfo",
     },
     (accessToken, refreshToken, profile, cb) => {
-      console.log(profile);
+      // Log Google profile data for reference
+      console.log("Google Profile Data:", profile);
+
+      // Check if the user already exists or create a new user with Google data
       User.findOrCreate({ googleId: profile.id }, (err, user) => {
-        return cb(err, user);
+        if (err) {
+          console.log(err);
+        } else {
+          // Pre-fill some fields with Google data
+          user.email = profile.emails[0].value;
+          user.firstName = profile.name.givenName;
+          user.lastName = profile.name.familyName;
+          user.profilePhoto = profile.photos[0].value;
+          // Save the user with the updated data
+          user.save(() => {
+            return cb(null, user);
+          });
+        }
       });
     }
   )
@@ -99,7 +113,6 @@ app.get("/register", (req, res) => {
 });
 
 app.get("/auth/google/secrets", passport.authenticate("google", { failureRedirect: "/login" }), (req, res) => {
-  // Successful authentication, redirect secrets.
   res.redirect("/secrets");
 });
 
@@ -133,7 +146,12 @@ app.get("/logout", (req, res) => {
 });
 
 app.post("/register", (req, res) => {
-  User.register({ username: req.body.username }, req.body.password, (err, user) => {
+  const newUser = new User({
+    username: req.body.username,
+    email: req.body.email, // Set the email field from the registration form
+  });
+
+  User.register(newUser, req.body.password, (err, user) => {
     if (err) {
       console.log(err);
       res.redirect("/register");
@@ -144,6 +162,7 @@ app.post("/register", (req, res) => {
     }
   });
 });
+
 
 app.post("/login", (req, res) => {
   const user = new User({
@@ -164,7 +183,6 @@ app.post("/login", (req, res) => {
 
 app.post("/submit", (req, res) => {
   const submittedSecret = req.body.secret;
-  //req.user -> current user (passport bizim için bu bilgileri sağlıyor)
 
   User.findById(req.user._id, (err, foundUser) => {
     if (err) {
